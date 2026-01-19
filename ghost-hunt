@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Ghost Hunt</title>
+  <style>
+    body { margin:0; overflow:hidden; font-family: Arial; }
+    #camera {
+      position: fixed;
+      top:0; left:0;
+      width:100%; height:100%;
+      object-fit: cover;
+      z-index: 1;
+    }
+    #overlay {
+      position: fixed;
+      top:0; left:0;
+      width:100%; height:100%;
+      z-index: 2;
+      pointer-events:none;
+    }
+    #hud {
+      position: fixed;
+      bottom: 10px;
+      width: 100%;
+      display: flex;
+      justify-content: space-around;
+      z-index: 3;
+      pointer-events: none;
+    }
+    .btn {
+      pointer-events: auto;
+      background: rgba(0,0,0,0.6);
+      color:white;
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-size: 16px;
+      border: none;
+    }
+    #ghost {
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform: translate(-50%,-50%);
+      width: 120px;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 4;
+    }
+    #compass {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.5);
+      color: white;
+      padding: 10px;
+      border-radius: 10px;
+      z-index: 4;
+    }
+    #status {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.5);
+      color: white;
+      padding: 10px;
+      border-radius: 10px;
+      z-index: 4;
+    }
+  </style>
+</head>
+<body>
+
+<video id="camera" autoplay playsinline></video>
+
+<div id="overlay">
+  <img id="ghost" src="https://i.imgur.com/6v5QzK2.png" />
+</div>
+
+<div id="compass">Heading: <span id="heading">0</span>°</div>
+<div id="status">Status: <span id="statustxt">Initializing...</span></div>
+
+<div id="hud">
+  <button class="btn" id="scanBtn">🔍 Scan</button>
+  <button class="btn" id="captureBtn">📷 Capture</button>
+</div>
+
+<script>
+  const video = document.getElementById("camera");
+  const ghost = document.getElementById("ghost");
+  const headingText = document.getElementById("heading");
+  const statusText = document.getElementById("statustxt");
+
+  let ghostBearing = 120; // degrees
+  let ghostDistance = 30; // meters
+  let currentHeading = 0;
+
+  // Start Camera
+  async function startCamera(){
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    video.srcObject = stream;
+  }
+
+  // Device Compass
+  window.addEventListener("deviceorientationabsolute", (event) => {
+    if (!event.alpha) return;
+    currentHeading = event.alpha;
+    headingText.innerText = Math.round(currentHeading);
+    updateGhostVisibility();
+  });
+
+  // Compass fallback for iOS
+  if (typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function") {
+    DeviceOrientationEvent.requestPermission()
+      .then(permissionState => {
+        if (permissionState === "granted") {
+          window.addEventListener("deviceorientationabsolute", (event) => {
+            currentHeading = event.alpha;
+            updateGhostVisibility();
+          });
+        }
+      })
+      .catch(console.error);
+  }
+
+  // Ghost Visibility based on heading
+  function updateGhostVisibility(){
+    const diff = Math.abs(ghostBearing - currentHeading);
+    const angleDiff = Math.min(diff, 360 - diff);
+
+    // ghost appears if within 20 degrees
+    if (angleDiff < 20) {
+      ghost.style.opacity = 1;
+      statusText.innerText = "Ghost is near!";
+    } else {
+      ghost.style.opacity = 0;
+      statusText.innerText = "Searching...";
+    }
+  }
+
+  // Buttons
+  document.getElementById("scanBtn").addEventListener("click", () => {
+    alert("Scanning... Ghost bearing: " + ghostBearing + "°");
+  });
+
+  document.getElementById("captureBtn").addEventListener("click", () => {
+    if (ghost.style.opacity == 1) {
+      alert("Captured ghost photo!");
+    } else {
+      alert("No ghost in view.");
+    }
+  });
+
+  startCamera();
+</script>
+</body>
+</html>
