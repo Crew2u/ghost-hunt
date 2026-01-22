@@ -16,9 +16,9 @@ body { margin:0; overflow:hidden; background:black; font-family:monospace; }
   bottom:20px;
   left:50%;
   transform:translateX(-50%);
-  width:300px;
+  width:320px;
   padding:16px;
-  background:radial-gradient(circle at top, #033, #000);
+  background:radial-gradient(circle at top, #022, #000);
   border:2px solid #0ff;
   border-radius:16px;
   box-shadow:0 0 30px #0ff;
@@ -37,7 +37,7 @@ body { margin:0; overflow:hidden; background:black; font-family:monospace; }
 
 #arrow {
   position:absolute;
-  top:10px;
+  bottom:50%;
   left:50%;
   width:4px;
   height:50px;
@@ -50,21 +50,18 @@ body { margin:0; overflow:hidden; background:black; font-family:monospace; }
   height:14px;
   background:#022;
   margin-top:10px;
-  overflow:hidden;
 }
 
 #emfFill {
   height:100%;
   width:0%;
   background:linear-gradient(90deg,#0ff,#fff);
-  box-shadow:0 0 10px #0ff;
 }
 
 #status {
   text-align:center;
   margin-top:8px;
-  font-size:12px;
-  opacity:0.8;
+  font-size:13px;
 }
 </style>
 </head>
@@ -77,13 +74,13 @@ body { margin:0; overflow:hidden; background:black; font-family:monospace; }
   </div>
   <div>EMF SIGNAL</div>
   <div id="emf"><div id="emfFill"></div></div>
-  <div id="status">SCANNING…</div>
+  <div id="status">WAITING FOR GPS…</div>
 </div>
 
 <a-scene
   embedded
-  vr-mode-ui="enabled:false"
   renderer="alpha:true"
+  vr-mode-ui="enabled:false"
   arjs="sourceType:webcam; gpsMinDistance:1; debugUIEnabled:false;"
 >
 
@@ -96,8 +93,9 @@ body { margin:0; overflow:hidden; background:black; font-family:monospace; }
 
   <a-camera gps-camera rotation-reader></a-camera>
 
+  <!-- 👻 GHOST ENTITY -->
   <a-entity id="ghost"
-    gps-entity-place="latitude:-26.4055; longitude:152.9146"
+    gps-entity-place="latitude:-26.41003; longitude:152.92618"
     visible="false"
     ghost-ai>
     <a-video
@@ -112,59 +110,65 @@ body { margin:0; overflow:hidden; background:black; font-family:monospace; }
 </a-scene>
 
 <script>
+/* ✅ SINGLE SOURCE OF TRUTH */
 const GHOST_LAT = -26.41003;
 const GHOST_LON = 152.92618;
-const VISIBILITY_DISTANCE = 10;
 
-let playerHeading = 0;
-let smoothedHeading = 0;
-let playerLat = null;
-let playerLon = null;
+/* 🔧 TESTING RANGE (REDUCE TO 10 LATER) */
+const VISIBILITY_DISTANCE = 30;
 
-const arrow = document.getElementById("arrow");
-const emfFill = document.getElementById("emfFill");
-const status = document.getElementById("status");
+let playerLat=null, playerLon=null;
+let heading=0, smoothHeading=0;
 
-window.addEventListener("deviceorientationabsolute", e=>{
-  if(e.alpha !== null){
-    playerHeading = 360 - e.alpha;
+const arrow=document.getElementById("arrow");
+const emfFill=document.getElementById("emfFill");
+const status=document.getElementById("status");
+
+/* 🧭 ANDROID SAFE COMPASS */
+window.addEventListener("deviceorientation", e=>{
+  if(e.alpha!==null){
+    heading = 360 - e.alpha;
   }
 });
 
+/* 📍 GPS */
 navigator.geolocation.watchPosition(p=>{
-  playerLat = p.coords.latitude;
-  playerLon = p.coords.longitude;
-},{ enableHighAccuracy:true });
+  playerLat=p.coords.latitude;
+  playerLon=p.coords.longitude;
+  status.innerText="SCANNING…";
+},{enableHighAccuracy:true});
 
-function distance(lat1,lon1,lat2,lon2){
+/* 📐 MATH */
+function distance(a,b,c,d){
   const R=6371e3;
-  const dLat=(lat2-lat1)*Math.PI/180;
-  const dLon=(lon2-lon1)*Math.PI/180;
+  const dLat=(c-a)*Math.PI/180;
+  const dLon=(d-b)*Math.PI/180;
   return R*2*Math.atan2(Math.sqrt(
     Math.sin(dLat/2)**2+
-    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2
+    Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dLon/2)**2
   ),Math.sqrt(1));
 }
 
-function bearing(lat1,lon1,lat2,lon2){
-  const y=Math.sin((lon2-lon1)*Math.PI/180)*Math.cos(lat2*Math.PI/180);
-  const x=Math.cos(lat1*Math.PI/180)*Math.sin(lat2*Math.PI/180)-
-    Math.sin(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.cos((lon2-lon1)*Math.PI/180);
+function bearing(a,b,c,d){
+  const y=Math.sin((d-b)*Math.PI/180)*Math.cos(c*Math.PI/180);
+  const x=Math.cos(a*Math.PI/180)*Math.sin(c*Math.PI/180)-
+          Math.sin(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.cos((d-b)*Math.PI/180);
   return (Math.atan2(y,x)*180/Math.PI+360)%360;
 }
 
+/* 👻 GHOST AI */
 AFRAME.registerComponent("ghost-ai",{
   init(){
     this.video=this.el.querySelector("a-video");
     this.opacity=0;
-    this.float=0;
+    this.t=0;
   },
   tick(time,delta){
     if(!playerLat) return;
 
     const d=distance(playerLat,playerLon,GHOST_LAT,GHOST_LON);
-
     const visible=d<VISIBILITY_DISTANCE;
+
     this.el.setAttribute("visible",visible);
 
     if(!visible){
@@ -174,33 +178,24 @@ AFRAME.registerComponent("ghost-ai",{
       return;
     }
 
-    const strength=1-d/VISIBILITY_DISTANCE;
-    emfFill.style.width=(strength*100)+"%";
-    status.innerText="ENTITY DETECTED";
+    status.innerText="ENTITY DETECTED ("+Math.round(d)+"m)";
+    emfFill.style.width=((1-d/VISIBILITY_DISTANCE)*100)+"%";
 
-    this.opacity+=0.01;
-    this.opacity=Math.min(this.opacity,0.9);
+    this.opacity=Math.min(this.opacity+0.01,0.9);
+    this.t+=delta;
 
-    this.float+=delta;
-    const y=2+Math.sin(this.float/800)*0.5;
-    const z=Math.sin(this.float/1200)*1.2;
+    const y=2+Math.sin(this.t/700)*0.4;
+    const z=Math.sin(this.t/1000)*1.0;
 
     this.video.setAttribute("position",`0 ${y} ${z}`);
     this.video.setAttribute("material","opacity",this.opacity);
 
-    // Retreat slightly if too close
-    if(d<4){
-      this.video.object3D.position.z += 0.02;
-    }
-
-    // Compass smoothing
     const b=bearing(playerLat,playerLon,GHOST_LAT,GHOST_LON);
-    smoothedHeading += (b - smoothedHeading) * 0.05;
-    arrow.style.transform=`translateX(-50%) rotate(${smoothedHeading-playerHeading}deg)`;
+    smoothHeading+= (b-smoothHeading)*0.05;
+    arrow.style.transform=`translateX(-50%) rotate(${smoothHeading-heading}deg)`;
   }
 });
 </script>
 
 </body>
 </html>
-
