@@ -93,7 +93,6 @@ body { margin:0; overflow:hidden; background:black; font-family:monospace; }
 
   <a-camera gps-camera rotation-reader></a-camera>
 
-  <!-- 👻 GHOST ENTITY -->
   <a-entity id="ghost"
     gps-entity-place="latitude:-26.41003; longitude:152.92618"
     visible="false"
@@ -110,11 +109,8 @@ body { margin:0; overflow:hidden; background:black; font-family:monospace; }
 </a-scene>
 
 <script>
-/* ✅ SINGLE SOURCE OF TRUTH */
 const GHOST_LAT = -26.41003;
 const GHOST_LON = 152.92618;
-
-/* 🔧 TESTING RANGE (REDUCE TO 10 LATER) */
 const VISIBILITY_DISTANCE = 30;
 
 let playerLat=null, playerLon=null;
@@ -124,19 +120,26 @@ const arrow=document.getElementById("arrow");
 const emfFill=document.getElementById("emfFill");
 const status=document.getElementById("status");
 
-/* 🧭 ANDROID SAFE COMPASS */
+/* 🧭 COMPASS */
 window.addEventListener("deviceorientation", e=>{
   if(e.alpha!==null){
     heading = 360 - e.alpha;
   }
 });
 
-/* 📍 GPS */
-navigator.geolocation.watchPosition(p=>{
-  playerLat=p.coords.latitude;
-  playerLon=p.coords.longitude;
-  status.innerText="SCANNING…";
-},{enableHighAccuracy:true});
+/* 📍 GPS — FIXED */
+navigator.geolocation.watchPosition(
+  p=>{
+    playerLat=p.coords.latitude;
+    playerLon=p.coords.longitude;
+    status.innerText="SCANNING…";
+  },
+  err=>{
+    status.innerText="GPS ERROR";
+    console.error(err);
+  },
+  {enableHighAccuracy:true}
+);
 
 /* 📐 MATH */
 function distance(a,b,c,d){
@@ -156,7 +159,7 @@ function bearing(a,b,c,d){
   return (Math.atan2(y,x)*180/Math.PI+360)%360;
 }
 
-/* 👻 GHOST AI */
+/* 👻 GHOST */
 AFRAME.registerComponent("ghost-ai",{
   init(){
     this.video=this.el.querySelector("a-video");
@@ -191,7 +194,7 @@ AFRAME.registerComponent("ghost-ai",{
     this.video.setAttribute("material","opacity",this.opacity);
 
     const b=bearing(playerLat,playerLon,GHOST_LAT,GHOST_LON);
-    smoothHeading+= (b-smoothHeading)*0.05;
+    smoothHeading+=(b-smoothHeading)*0.05;
     arrow.style.transform=`translateX(-50%) rotate(${smoothHeading-heading}deg)`;
   }
 });
