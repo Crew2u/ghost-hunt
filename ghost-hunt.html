@@ -1,103 +1,202 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>AR Ghost Hunt</title>
+<meta charset="utf-8">
+<title>Ghost Detector</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
-  <!-- A-Frame + AR.js (location based) -->
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+<script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
-  <style>
-    body { margin: 0; overflow: hidden; background: black; }
-    #status {
-      position: fixed;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: #0f0;
-      font-family: monospace;
-      background: rgba(0,0,0,0.6);
-      padding: 8px 14px;
-      border-radius: 8px;
-      z-index: 10;
-    }
-  </style>
+<style>
+body { margin:0; overflow:hidden; background:black; font-family:monospace; }
+
+#hud {
+  position:fixed;
+  bottom:20px;
+  left:50%;
+  transform:translateX(-50%);
+  width:300px;
+  padding:16px;
+  background:radial-gradient(circle at top, #033, #000);
+  border:2px solid #0ff;
+  border-radius:16px;
+  box-shadow:0 0 30px #0ff;
+  color:#0ff;
+  z-index:10;
+}
+
+#compass {
+  width:120px;
+  height:120px;
+  border:2px solid #0ff;
+  border-radius:50%;
+  margin:0 auto 12px;
+  position:relative;
+}
+
+#arrow {
+  position:absolute;
+  top:10px;
+  left:50%;
+  width:4px;
+  height:50px;
+  background:#0ff;
+  transform-origin:bottom center;
+  box-shadow:0 0 10px #0ff;
+}
+
+#emf {
+  height:14px;
+  background:#022;
+  margin-top:10px;
+  overflow:hidden;
+}
+
+#emfFill {
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg,#0ff,#fff);
+  box-shadow:0 0 10px #0ff;
+}
+
+#status {
+  text-align:center;
+  margin-top:8px;
+  font-size:12px;
+  opacity:0.8;
+}
+</style>
 </head>
 
 <body>
 
-<div id="status">Acquiring location…</div>
+<div id="hud">
+  <div id="compass">
+    <div id="arrow"></div>
+  </div>
+  <div>EMF SIGNAL</div>
+  <div id="emf"><div id="emfFill"></div></div>
+  <div id="status">SCANNING…</div>
+</div>
 
 <a-scene
   embedded
-  vr-mode-ui="enabled: false"
-  renderer="alpha: true"
-  arjs="sourceType: webcam; gpsMinDistance: 1; debugUIEnabled: false;"
+  vr-mode-ui="enabled:false"
+  renderer="alpha:true"
+  arjs="sourceType:webcam; gpsMinDistance:1; debugUIEnabled:false;"
 >
 
   <a-assets>
-    <video
-      id="ghostVideo"
+    <video id="ghostVid"
       src="ghost_realistic.webm"
-      autoplay
-      loop
-      muted
-      playsinline
-      crossorigin="anonymous">
+      autoplay loop muted playsinline crossorigin="anonymous">
     </video>
   </a-assets>
 
-  <!-- Camera -->
   <a-camera gps-camera rotation-reader></a-camera>
 
-  <!-- Ghost -->
-  <a-entity
-    id="ghost"
-    gps-entity-place="latitude: -26.4055; longitude: 152.9146"
+  <a-entity id="ghost"
+    gps-entity-place="latitude:-26.4055; longitude:152.9146"
     visible="false"
-    ghost-behaviour
-  >
+    ghost-ai>
     <a-video
-      src="#ghostVideo"
+      src="#ghostVid"
       width="3"
       height="4"
       position="0 2 0"
-      material="transparent: true; opacity: 0.0">
+      material="transparent:true; opacity:0">
     </a-video>
   </a-entity>
 
 </a-scene>
 
 <script>
-AFRAME.registerComponent('ghost-behaviour', {
-  init() {
-    this.video = this.el.querySelector('a-video');
-    this.opacity = 0;
-    this.direction = 1;
-    this.time = 0;
-    this.el.setAttribute('visible', true);
-    document.getElementById('status').innerText = "Ghost detected…";
+const GHOST_LAT = -26.4055;
+const GHOST_LON = 152.9146;
+const VISIBILITY_DISTANCE = 10;
+
+let playerHeading = 0;
+let smoothedHeading = 0;
+let playerLat = null;
+let playerLon = null;
+
+const arrow = document.getElementById("arrow");
+const emfFill = document.getElementById("emfFill");
+const status = document.getElementById("status");
+
+window.addEventListener("deviceorientationabsolute", e=>{
+  if(e.alpha !== null){
+    playerHeading = 360 - e.alpha;
+  }
+});
+
+navigator.geolocation.watchPosition(p=>{
+  playerLat = p.coords.latitude;
+  playerLon = p.coords.longitude;
+},{ enableHighAccuracy:true });
+
+function distance(lat1,lon1,lat2,lon2){
+  const R=6371e3;
+  const dLat=(lat2-lat1)*Math.PI/180;
+  const dLon=(lon2-lon1)*Math.PI/180;
+  return R*2*Math.atan2(Math.sqrt(
+    Math.sin(dLat/2)**2+
+    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2
+  ),Math.sqrt(1));
+}
+
+function bearing(lat1,lon1,lat2,lon2){
+  const y=Math.sin((lon2-lon1)*Math.PI/180)*Math.cos(lat2*Math.PI/180);
+  const x=Math.cos(lat1*Math.PI/180)*Math.sin(lat2*Math.PI/180)-
+    Math.sin(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.cos((lon2-lon1)*Math.PI/180);
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+
+AFRAME.registerComponent("ghost-ai",{
+  init(){
+    this.video=this.el.querySelector("a-video");
+    this.opacity=0;
+    this.float=0;
   },
+  tick(time,delta){
+    if(!playerLat) return;
 
-  tick(time, delta) {
-    this.time += delta;
+    const d=distance(playerLat,playerLon,GHOST_LAT,GHOST_LON);
 
-    // Fade in/out
-    this.opacity += this.direction * 0.0005 * delta;
-    if (this.opacity > 0.9) this.direction = -1;
-    if (this.opacity < 0.3) this.direction = 1;
+    const visible=d<VISIBILITY_DISTANCE;
+    this.el.setAttribute("visible",visible);
 
-    // Floating movement
-    const y = 2 + Math.sin(this.time / 800) * 0.4;
-    const z = Math.sin(this.time / 1200) * 1.2;
+    if(!visible){
+      emfFill.style.width="0%";
+      status.innerText="NO SIGNAL";
+      this.video.setAttribute("material","opacity",0);
+      return;
+    }
 
-    this.video.setAttribute('position', `0 ${y} ${z}`);
-    this.video.setAttribute('material', 'opacity', this.opacity);
+    const strength=1-d/VISIBILITY_DISTANCE;
+    emfFill.style.width=(strength*100)+"%";
+    status.innerText="ENTITY DETECTED";
 
-    // Slight scale breathing
-    const scale = 1 + Math.sin(this.time / 1000) * 0.03;
-    this.video.setAttribute('scale', `${scale} ${scale} ${scale}`);
+    this.opacity+=0.01;
+    this.opacity=Math.min(this.opacity,0.9);
+
+    this.float+=delta;
+    const y=2+Math.sin(this.float/800)*0.5;
+    const z=Math.sin(this.float/1200)*1.2;
+
+    this.video.setAttribute("position",`0 ${y} ${z}`);
+    this.video.setAttribute("material","opacity",this.opacity);
+
+    // Retreat slightly if too close
+    if(d<4){
+      this.video.object3D.position.z += 0.02;
+    }
+
+    // Compass smoothing
+    const b=bearing(playerLat,playerLon,GHOST_LAT,GHOST_LON);
+    smoothedHeading += (b - smoothedHeading) * 0.05;
+    arrow.style.transform=`translateX(-50%) rotate(${smoothedHeading-playerHeading}deg)`;
   }
 });
 </script>
@@ -105,4 +204,3 @@ AFRAME.registerComponent('ghost-behaviour', {
 </body>
 </html>
 
-</html>
